@@ -41,9 +41,10 @@ class Regression:
         start = time.time()
 
         # set up the machine learning pipeline
-        self.names = FeatureNames()
+        self.names1 = FeatureNames()
         self.datetime = TimeFeatures()
         self.categorical = CategoricalFeatures()
+        self.names2 = FeatureNames()
         self.impute = ImputeFeatures()
         self.constant = ConstantFeatures()
         self.selection1 = FeatureSelector()
@@ -63,9 +64,10 @@ class Regression:
         )
         
         # run preprocessing
-        preprocessX = self.names.fit_transform(preprocessX)
+        preprocessX = self.names1.fit_transform(preprocessX)
         preprocessX = self.datetime.fit_transform(preprocessX)
         preprocessX = self.categorical.fit_transform(preprocessX)
+        preprocessX = self.names2.fit_transform(preprocessX)
         preprocessX = self.impute.fit_transform(preprocessX)
         preprocessX = self.constant.fit_transform(preprocessX)
         preprocessX = self.selection1.fit_transform(preprocessX, preprocessy)
@@ -75,9 +77,10 @@ class Regression:
         
         # run the pipeline on training data
         print("> Transforming The Training Data")
-        trainX = self.names.transform(trainX)
+        trainX = self.names1.transform(trainX)
         trainX = self.datetime.transform(trainX)
         trainX = self.categorical.transform(trainX)
+        trainX = self.names2.transform(trainX)
         trainX = self.impute.transform(trainX)
         trainX = self.constant.transform(trainX)
         trainX = self.selection1.transform(trainX)
@@ -95,9 +98,10 @@ class Regression:
 
         # transform the testing data and score the performance
         print("> Transforming The Testing Data")
-        testX = self.names.transform(testX)
+        testX = self.names1.transform(testX)
         testX = self.datetime.transform(testX)
         testX = self.categorical.transform(testX)
+        testX = self.names2.transform(testX)
         testX = self.impute.transform(testX)
         testX = self.constant.transform(testX)
         testX = self.selection1.transform(testX)
@@ -114,9 +118,10 @@ class Regression:
 
         # run the pipeline on all the data
         print("> Transforming All The Data")
-        X = self.names.transform(X)
+        X = self.names1.transform(X)
         X = self.datetime.transform(X)
         X = self.categorical.transform(X)
+        X = self.names2.transform(X)
         X = self.impute.transform(X)
         X = self.constant.transform(X)
         X = self.selection1.transform(X)
@@ -147,9 +152,10 @@ class Regression:
 
         # transform and predict new data
         print("> Transforming The New Data")
-        X = self.names.transform(X)
+        X = self.names1.transform(X)
         X = self.datetime.transform(X)
         X = self.categorical.transform(X)
+        X = self.names2.transform(X)
         X = self.impute.transform(X)
         X = self.constant.transform(X)
         X = self.selection1.transform(X)
@@ -430,12 +436,14 @@ class Regression:
 
     def dump(self):
         # save the machine learning pipeline and data
-        with open(f"{self.name}/dump/names", "wb") as f:
-            pickle.dump(self.names, f)
+        with open(f"{self.name}/dump/names1", "wb") as f:
+            pickle.dump(self.names1, f)
         with open(f"{self.name}/dump/datetime", "wb") as f:
             pickle.dump(self.datetime, f)
         with open(f"{self.name}/dump/categorical", "wb") as f:
             pickle.dump(self.categorical, f)
+        with open(f"{self.name}/dump/names2", "wb") as f:
+            pickle.dump(self.names2, f)
         with open(f"{self.name}/dump/impute", "wb") as f:
             pickle.dump(self.impute, f)
         with open(f"{self.name}/dump/constant", "wb") as f:
@@ -455,12 +463,14 @@ class Regression:
 
     def load(self):
         # load the machine learning pipeline and data
-        with open(f"{self.name}/dump/names", "rb") as f:
-            self.names = pickle.load(f)
+        with open(f"{self.name}/dump/names1", "rb") as f:
+            self.names1 = pickle.load(f)
         with open(f"{self.name}/dump/datetime", "rb") as f:
             self.datetime = pickle.load(f)
         with open(f"{self.name}/dump/categorical", "rb") as f:
             self.categorical = pickle.load(f)
+        with open(f"{self.name}/dump/names2", "rb") as f:
+            self.names2 = pickle.load(f)
         with open(f"{self.name}/dump/impute", "rb") as f:
             self.impute = pickle.load(f)
         with open(f"{self.name}/dump/constant", "rb") as f:
