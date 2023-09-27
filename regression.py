@@ -764,7 +764,7 @@ class AtwoodNumbers:
         if not self.atwood:
             return pd.DataFrame()
 
-        if len(self.columns) == 0:
+        if len(self.columns) < 2:
             return pd.DataFrame()
         numbers = list()
         pairs = list(combinations(self.columns, 2))
