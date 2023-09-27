@@ -7,20 +7,47 @@ import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype as is_datetime
 from sklearn.impute import KNNImputer
 from sklearn.feature_selection import VarianceThreshold
-from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, KBinsDiscretizer, PolynomialFeatures
 from xgboost.sklearn import XGBRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from scipy.stats import kstest
+from itertools import combinations
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.offline import plot
 
 
 class Regression:
-    def __init__(self, name, frac=1):
+    def __init__(
+        self, 
+        name="Regression Analysis", 
+        frac=1, 
+        rename=True, 
+        time=True, 
+        binary=True, 
+        imputation=True, 
+        variance=True,
+        scale=True,
+        atwood=True,
+        binning=True,
+        reciprocal=True, 
+        interaction=True, 
+        selection=True,
+    ):
         self.name = name  # name of the analysis
         self.frac= frac  # fraction of data to use for training the preprocessors
-        
+        self.rename = rename  # should features be renamed to remove whitespace?
+        self.time = time  # should datetime features be computed?
+        self.binary = binary  # should categorical features be converted to binary features?
+        self.imputation = imputation  # should missing values be filled in?
+        self.variance = variance  # should we remove constant features?
+        self.scale = scale  # should we scale the features?
+        self.atwood = atwood  # should we compute atwood numbers?
+        self.binning = binning  # should we put continous features into bins?
+        self.reciprocal = reciprocal  # should reciporcals be computed?
+        self.interaction = interaction  # should interactions be computed?
+        self.selection = selection  # should we perform feature selection?
+
         # create folders for output files
         self.folder(name)
         self.folder(f"{name}/dump")  # machine learning pipeline and data
@@ -41,16 +68,20 @@ class Regression:
         start = time.time()
 
         # set up the machine learning pipeline
-        self.names1 = FeatureNames()
-        self.datetime = TimeFeatures()
-        self.categorical = CategoricalFeatures()
-        self.names2 = FeatureNames()
-        self.impute = ImputeFeatures()
-        self.constant = ConstantFeatures()
-        self.selection1 = FeatureSelector()
-        self.reciprocals = Reciprocals()
-        self.interactions = Interactions()
-        self.selection2 = FeatureSelector()
+        self.names1 = FeatureNames(self.rename)
+        self.datetime = TimeFeatures(self.time)
+        self.categorical = CategoricalFeatures(self.binary)
+        self.names2 = FeatureNames(self.rename)
+        self.impute = ImputeFeatures(self.imputation)
+        self.constant1 = ConstantFeatures(self.variance)
+        self.scaler = ScaleFeatures(self.scale)
+        self.selection1 = FeatureSelector(self.selection)
+        self.numbers = AtwoodNumbers(self.atwood)
+        self.bin = BinFeatures(self.binning)
+        self.reciprocals = Reciprocals(self.reciprocal)
+        self.interactions = Interactions(self.interaction)
+        self.constant2 = ConstantFeatures(self.variance)
+        self.selection2 = FeatureSelector(self.selection)
         self.tree = XGBRegressor(
             booster="gbtree",
             n_estimators=100, 
@@ -69,10 +100,15 @@ class Regression:
         preprocessX = self.categorical.fit_transform(preprocessX)
         preprocessX = self.names2.fit_transform(preprocessX)
         preprocessX = self.impute.fit_transform(preprocessX)
-        preprocessX = self.constant.fit_transform(preprocessX)
+        preprocessX = self.constant1.fit_transform(preprocessX)
+        preprocessX = self.scaler.fit_transform(preprocessX)
         preprocessX = self.selection1.fit_transform(preprocessX, preprocessy)
+        numbers = self.numbers.fit_transform(preprocessX)
+        preprocessX = self.bin.fit_transform(preprocessX)
         preprocessX = self.reciprocals.fit_transform(preprocessX)
         preprocessX = self.interactions.fit_transform(preprocessX)
+        preprocessX = pd.concat([preprocessX, numbers], axis="columns")
+        preprocessX = self.constant2.fit_transform(preprocessX)
         preprocessX = self.selection2.fit_transform(preprocessX, preprocessy)
         
         # run the pipeline on training data
@@ -82,10 +118,15 @@ class Regression:
         trainX = self.categorical.transform(trainX)
         trainX = self.names2.transform(trainX)
         trainX = self.impute.transform(trainX)
-        trainX = self.constant.transform(trainX)
+        trainX = self.constant1.transform(trainX)
+        trainX = self.scaler.transform(trainX)
         trainX = self.selection1.transform(trainX)
+        numbers = self.numbers.transform(trainX)
+        trainX = self.bin.transform(trainX)
         trainX = self.reciprocals.transform(trainX)
         trainX = self.interactions.transform(trainX)
+        trainX = pd.concat([trainX, numbers], axis="columns")
+        trainX = self.constant2.transform(trainX)
         trainX = self.selection2.transform(trainX)
         print("> Training XGBoost")
         self.tree.fit(trainX, trainy)
@@ -103,10 +144,15 @@ class Regression:
         testX = self.categorical.transform(testX)
         testX = self.names2.transform(testX)
         testX = self.impute.transform(testX)
-        testX = self.constant.transform(testX)
+        testX = self.constant1.transform(testX)
+        testX = self.scaler.transform(testX)
         testX = self.selection1.transform(testX)
+        numbers = self.numbers.transform(testX)
+        testX = self.bin.transform(testX)
         testX = self.reciprocals.transform(testX)
         testX = self.interactions.transform(testX)
+        testX = pd.concat([testX, numbers], axis="columns")
+        testX = self.constant2.transform(testX)
         testX = self.selection2.transform(testX)
         self.performance(testX, testy)
 
@@ -123,10 +169,15 @@ class Regression:
         X = self.categorical.transform(X)
         X = self.names2.transform(X)
         X = self.impute.transform(X)
-        X = self.constant.transform(X)
+        X = self.constant1.transform(X)
+        X = self.scaler.transform(X)
         X = self.selection1.transform(X)
+        numbers = self.numbers.transform(X)
+        X = self.bin.transform(X)
         X = self.reciprocals.transform(X)
         X = self.interactions.transform(X)
+        X = pd.concat([X, numbers], axis="columns")
+        X = self.constant2.transform(X)
         X = self.selection2.transform(X)
         print("> Training XGBoost")
         self.tree.fit(X, y)
@@ -157,10 +208,15 @@ class Regression:
         X = self.categorical.transform(X)
         X = self.names2.transform(X)
         X = self.impute.transform(X)
-        X = self.constant.transform(X)
+        X = self.constant1.transform(X)
+        X = self.scaler.transform(X)
         X = self.selection1.transform(X)
+        numbers = self.numbers.transform(X)
+        X = self.bin.transform(X)
         X = self.reciprocals.transform(X)
         X = self.interactions.transform(X)
+        X = pd.concat([X, numbers], axis="columns")
+        X = self.constant2.transform(X)
         X = self.selection2.transform(X)
         y = self.tree.predict(X)
 
@@ -446,14 +502,22 @@ class Regression:
             pickle.dump(self.names2, f)
         with open(f"{self.name}/dump/impute", "wb") as f:
             pickle.dump(self.impute, f)
-        with open(f"{self.name}/dump/constant", "wb") as f:
-            pickle.dump(self.constant, f)
+        with open(f"{self.name}/dump/constant1", "wb") as f:
+            pickle.dump(self.constant1, f)
+        with open(f"{self.name}/dump/scaler", "wb") as f:
+            pickle.dump(self.scaler, f)
         with open(f"{self.name}/dump/selection1", "wb") as f:
             pickle.dump(self.selection1, f)
+        with open(f"{self.name}/dump/numbers", "wb") as f:
+            pickle.dump(self.numbers, f)
+        with open(f"{self.name}/dump/bin", "wb") as f:
+            pickle.dump(self.bin, f)
         with open(f"{self.name}/dump/reciprocals", "wb") as f:
             pickle.dump(self.reciprocals, f)
         with open(f"{self.name}/dump/interactions", "wb") as f:
             pickle.dump(self.interactions, f)
+        with open(f"{self.name}/dump/constant2", "wb") as f:
+            pickle.dump(self.constant2, f)
         with open(f"{self.name}/dump/selection2", "wb") as f:
             pickle.dump(self.selection2, f)
         with open(f"{self.name}/dump/tree", "wb") as f:
@@ -473,14 +537,22 @@ class Regression:
             self.names2 = pickle.load(f)
         with open(f"{self.name}/dump/impute", "rb") as f:
             self.impute = pickle.load(f)
-        with open(f"{self.name}/dump/constant", "rb") as f:
-            self.constant = pickle.load(f)
+        with open(f"{self.name}/dump/constant1", "rb") as f:
+            self.constant1 = pickle.load(f)
+        with open(f"{self.name}/dump/scaler", "rb") as f:
+            self.scaler = pickle.load(f)
         with open(f"{self.name}/dump/selection1", "rb") as f:
             self.selection1 = pickle.load(f)
+        with open(f"{self.name}/dump/numbers", "rb") as f:
+            self.numbers = pickle.load(f)
+        with open(f"{self.name}/dump/bin", "rb") as f:
+            self.bin = pickle.load(f)
         with open(f"{self.name}/dump/reciprocals", "rb") as f:
             self.reciprocals = pickle.load(f)
         with open(f"{self.name}/dump/interactions", "rb") as f:
             self.interactions = pickle.load(f)
+        with open(f"{self.name}/dump/constant2", "rb") as f:
+            self.constant2 = pickle.load(f)
         with open(f"{self.name}/dump/selection2", "rb") as f:
             self.selection2 = pickle.load(f)
         with open(f"{self.name}/dump/tree", "rb") as f:
@@ -490,13 +562,21 @@ class Regression:
 
 
 class FeatureNames:
+    def __init__(self, rename=True):
+        self.rename = rename
+
     def fit(self, X, y=None):
+        if not self.rename:
+            return self
         print("> Renaming Features")
 
         self.columns = [re.sub(" ", "_", col) for col in X.columns]
         return self
 
     def transform(self, X, y=None):
+        if not self.rename:
+            return X
+
         X.columns = self.columns
         return X
 
@@ -506,7 +586,12 @@ class FeatureNames:
 
         
 class TimeFeatures:
+    def __init__(self, time=True):
+        self.time = time
+
     def fit(self, X, y=None):
+        if not self.time:
+            return self
         print("> Extracting Time Features")
 
         # check if any columns are timestamps
@@ -514,6 +599,9 @@ class TimeFeatures:
         return self
 
     def transform(self, X, y=None):
+        if not self.time:
+            return X
+
         if len(self.features) == 0:
             return X
         else:
@@ -528,7 +616,7 @@ class TimeFeatures:
             # extract timestamp features
             dt = pd.DataFrame()
             for col in self.features:
-                dt[f"{col}_year"] = df[col].dt.year
+                dt[f"{col}_year"] = df[col].dt.isocalendar().year
                 dt[f"{col}_month_of_year"] = df[col].dt.month
                 dt[f"{col}_week_of_year"] = df[col].dt.isocalendar().week
                 dt[f"{col}_day_of_month"] = df[col].dt.day
@@ -544,17 +632,29 @@ class TimeFeatures:
 
 
 class CategoricalFeatures:
+    def __init__(self, binary=True):
+        self.binary = binary
+
     def fit(self, X, y=None):
+        if not self.binary:
+            return self
         print("> Transforming Categorical Features")
 
         strings = X.select_dtypes(include="object").columns.tolist()
         df = X.copy().drop(columns=strings)
-        numbers = [col for col in df.columns if len(df[col].unique()) <= 30]
+        numbers = [col for col in df.columns if len(df[col].unique()) <= 53]
         self.categorical = strings + numbers
+        if len(self.categorical) == 0:
+            return self
         self.encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
         return self.encoder.fit(X[self.categorical].astype(str))
 
     def transform(self, X, y=None):
+        if not self.binary:
+            return X
+
+        if len(self.categorical) == 0:
+            return X
         continuous = X.copy().drop(columns=self.categorical)
         binary = self.encoder.transform(X[self.categorical].astype(str))
         binary = pd.DataFrame(binary, columns=self.encoder.get_feature_names_out())
@@ -567,7 +667,12 @@ class CategoricalFeatures:
 
 
 class ImputeFeatures:
+    def __init__(self, imputation=True):
+        self.imputation = imputation
+
     def fit(self, X, y=None):
+        if not self.imputation:
+            return self
         print("> Filling In Missing Values")
 
         self.columns = X.columns
@@ -575,6 +680,9 @@ class ImputeFeatures:
         return self.imputer.fit(X)
 
     def transform(self, X, y=None):
+        if not self.imputation:
+            return X
+
         df = self.imputer.transform(X)
         df = pd.DataFrame(df, columns=self.columns)
         return df
@@ -585,13 +693,21 @@ class ImputeFeatures:
 
 
 class ConstantFeatures:
+    def __init__(self, variance=True):
+        self.variance = variance
+
     def fit(self, X, y=None):
+        if not self.variance:
+            return self
         print("> Removing Constant Features")
 
         self.selector = VarianceThreshold()
         return self.selector.fit(X)
 
     def transform(self, X, y=None):
+        if not self.variance:
+            return X
+
         df = self.selector.transform(X)
         df = pd.DataFrame(df, columns=self.selector.get_feature_names_out())
         return df
@@ -601,17 +717,131 @@ class ConstantFeatures:
         return self.transform(X, y)
 
 
-class Reciprocals:
-    def fit(self, X, y=None):
-        print("> Computing Reciprocals")
+class ScaleFeatures:
+    def __init__(self, scale=True):
+        self.scale = scale
 
-        df = 1 / X.copy()
-        self.columns = df.iloc[:, np.where(df.isin([np.inf, -np.inf]).any() == False)[0]].columns.tolist()
+    def fit(self, X, y=None):
+        if not self.scale:
+            return self
+        print("> Scaling Features")
+        
+        self.columns = [col for col in X.columns if len(X[col].unique()) > 2]
+        if len(self.columns) == 0:
+            return self
+        self.scaler = MinMaxScaler(feature_range=(0.2, 0.8))
+        return self.scaler.fit(X[self.columns])
+
+    def transform(self, X, y=None):
+        if not self.scale:
+            return X
+
+        if len(self.columns) == 0:
+            return X
+        df = self.scaler.transform(X[self.columns])
+        df = pd.DataFrame(df, columns=self.columns)
+        df = pd.concat([X.drop(columns=self.columns), df], axis="columns")
+        return df
+
+    def fit_transform(self, X, y=None):
+        self.fit(X, y)
+        return self.transform(X, y)
+
+    
+class AtwoodNumbers:
+    def __init__(self, atwood=True):
+        self.atwood = atwood
+
+    def fit(self, X, y=None):
+        if not self.atwood:
+            return self
+        print("> Computing Atwoood Numbers")
+
+        self.columns = [col for col in X.columns if len(X[col].unique()) > 2]
         return self
 
     def transform(self, X, y=None):
+        if not self.atwood:
+            return pd.DataFrame()
+
+        if len(self.columns) == 0:
+            return pd.DataFrame()
+        numbers = list()
+        pairs = list(combinations(self.columns, 2))
+        for pair in pairs:
+            numbers.append(pd.DataFrame({
+                f"({pair[0]}-{pair[1]})/({pair[0]}+{pair[1]})": (X[pair[0]] - X[pair[1]]) / (X[pair[0]] + X[pair[1]]),
+            }))
+        df = pd.concat(numbers, axis="columns")
+        df = df.fillna(0)
+        df.replace(np.inf, 1e6, inplace=True)
+        df.replace(-np.inf, -1e6, inplace=True)
+        return df
+
+    def fit_transform(self, X, y=None):
+        self.fit(X, y)
+        return self.transform(X, y)
+    
+
+class BinFeatures:
+    def __init__(self, binning=True):
+        self.binning = binning
+
+    def fit(self, X, y=None):
+        if not self.binning:
+            return self
+        print("> Binning Features")
+        
+        self.columns = [col for col in X.columns if len(X[col].unique()) > 2]
+        if len(self.columns) == 0:
+            return self
+        self.binner = KBinsDiscretizer(n_bins=3, encode="onehot", strategy="uniform", subsample=None)
+        return self.binner.fit(X[self.columns])
+
+    def transform(self, X, y=None):
+        if not self.binning:
+            return X
+
+        if len(self.columns) == 0:
+            return X
+        df = self.binner.transform(X[self.columns]).toarray()
+        edges = self.binner.bin_edges_
+        columns = list()
+        for i, feature in enumerate(self.columns):
+            bins = np.around(edges[i], 6)
+            columns.append(f"{feature}({bins[0]}-{bins[1]})")
+            columns.append(f"{feature}({bins[1]}-{bins[2]})")
+            columns.append(f"{feature}({bins[2]}-{bins[3]})")
+        df = pd.DataFrame(df, columns=columns)
+        df = pd.concat([X, df], axis="columns")
+        return df
+
+    def fit_transform(self, X, y=None):
+        self.fit(X, y)
+        return self.transform(X, y)
+    
+    
+class Reciprocals:
+    def __init__(self, reciprocal=True):
+        self.reciprocal = reciprocal
+
+    def fit(self, X, y=None):
+        if not self.reciprocal:
+            return self
+        print("> Computing Reciprocals")
+
+        self.columns = [col for col in X.columns if len(X[col].unique()) > 2]
+        return self
+
+    def transform(self, X, y=None):
+        if not self.reciprocal:
+            return X
+
+        if len(self.columns) == 0:
+            return X
         df = 1 / X.copy()[self.columns]
-        df.replace([np.inf, -np.inf], 0, inplace=True)
+        df.replace(np.inf, 1e6, inplace=True)
+        df.replace(-np.inf, -1e6, inplace=True)
         df.columns = [f"1/{col}" for col in df.columns]
         df = pd.concat([X, df], axis="columns")
         return df
@@ -622,7 +852,12 @@ class Reciprocals:
 
 
 class Interactions:
+    def __init__(self, interaction=True):
+        self.interaction = interaction
+
     def fit(self, X, y=None):
+        if not self.interaction:
+            return self
         print("> Computing Interactions")
 
         self.interactions = PolynomialFeatures(
@@ -633,6 +868,9 @@ class Interactions:
         return self.interactions.fit(X)
 
     def transform(self, X, y=None):
+        if not self.interaction:
+            return X
+
         df = self.interactions.transform(X)
         columns = self.interactions.get_feature_names_out()
         columns = [re.sub(" ", "*", col) for col in columns]
@@ -645,7 +883,12 @@ class Interactions:
 
 
 class FeatureSelector:
+    def __init__(self, selection=True):
+        self.selection = selection
+
     def fit(self, X, y=None):
+        if not self.selection:
+            return self
         print("> Selecting Features")
 
         tree = XGBRegressor(
@@ -677,6 +920,9 @@ class FeatureSelector:
         return self
 
     def transform(self, X, y=None):
+        if not self.selection:
+            return X
+
         return X[self.columns]
 
     def fit_transform(self, X, y=None):
