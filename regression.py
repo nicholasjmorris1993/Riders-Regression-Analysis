@@ -232,6 +232,38 @@ class Regression:
         self.run_time(start, end)
 
         return y
+    
+    def refit(self, X, y):
+        print("Model Retraining:")
+        start = time.time()
+
+        # transform the new data
+        print("> Transforming The New Data")
+        X = self.names1.transform(X)
+        X = self.datetime.transform(X)
+        X = self.categorical.transform(X)
+        X = self.names2.transform(X)
+        X = self.impute.transform(X)
+        X = self.constant1.transform(X)
+        X = self.scaler.transform(X)
+        X = self.selection1.transform(X)
+        numbers = self.numbers.transform(X)
+        X = self.bin.transform(X)
+        X = self.reciprocals.transform(X)
+        X = self.interactions.transform(X)
+        X = pd.concat([X, numbers], axis="columns")
+        X = self.constant2.transform(X)
+        X = self.selection2.transform(X)
+        
+        # add the new data to the model data
+        self.X = pd.concat([self.X, X], axis="index").reset_index(drop=True)
+        self.y = pd.concat([self.y, y], axis="index").reset_index(drop=True)
+        
+        print("> Training XGBoost")
+        self.tree.fit(self.X, self.y)
+        
+        end = time.time()
+        self.run_time(start, end)
 
     def performance(self, X, y):
         # compute RMSE and R2
@@ -242,6 +274,8 @@ class Regression:
             "RMSE": self.rmse,
             "R2": self.r2,
         })
+        self.rmse = np.mean(self.rmse)
+        self.r2 = np.mean(self.r2)
 
         # plot RMSE and R2
         self.histogram(
@@ -276,6 +310,7 @@ class Regression:
             title=f"{self.name}: Histogram For Residuals, {in_control} In Control",
             font_size=16,
         )
+        self.in_control = in_control
 
         # plot the control limits for the moving range of residuals
         in_control = df.loc[(df["Moving Range"] >= df["Moving Range LCL"]) & (df["Moving Range"] <= df["Moving Range UCL"])].shape[0]
@@ -325,6 +360,7 @@ class Regression:
             title=f"{self.name}: XGBoost Feature Importance",
             font_size=16,
         )
+        self.indicators = indicators
 
     def monitor(self, X, y):
         y_name = self.y.columns[0]
@@ -355,6 +391,7 @@ class Regression:
             title=f"{self.name}: Feature Drift, Drift Detected If pvalue < 0.05",
             font_size=16,
         )
+        self.drift = pvalues
 
         # compute control limits for predictions
         df = self.imr(y)
