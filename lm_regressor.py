@@ -982,13 +982,26 @@ class FeatureNames:
         if self.verbose:
             print("> Renaming Features")
 
-        self.columns = [re.sub(" ", "_", col) for col in X.columns]
+        # make sure all column names are strings
+        self.columns = X.columns.astype(str)
+
+        # remove white space
+        self.columns = [re.sub(" ", "_", col) for col in self.columns]
+
+        # make sure column names are unique
+        df = pd.DataFrame({"Names": self.columns})
+        counts = df.value_counts()
+        counts = counts.loc[counts > 1]
+        for i in range(counts.shape[0]):
+            df.loc[df["Names"] == counts.index[i][0], "Names"] = df.loc[df["Names"] == counts.index[i][0], "Names"].astype(str) + np.arange(counts[i]).astype(str) 
+        self.columns = df["Names"].tolist()
+
         return self
 
     def transform(self, X, y=None):
         if not self.rename:
             return X
-
+        
         X = X.copy()
         X.columns = self.columns
         return X
